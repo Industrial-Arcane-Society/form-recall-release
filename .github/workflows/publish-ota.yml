@@ -1,0 +1,55 @@
+name: Publish update channel
+
+run-name: OTA ${{ inputs.channel || 'scheduled' }} ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        description: Target update channel
+        required: true
+        default: stable
+        options: [stable, alpha]
+      version:
+        type: string
+        description: Exact published version, without v. Leave blank for the latest.
+        required: false
+  schedule:
+    - cron: '23,53 * * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(github.event_name == 'schedule' && '["stable","alpha"]' || format('["{0}"]', inputs.channel)) }}
+    concurrency:
+      group: formrecall-ota-${{ matrix.channel }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: Industrial-Arcane-Society/form-recall
+          ref: a35be35fcc2e1bf5e6281bb437d6f9b06638c771
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify portable assets, publish OTA and promote the signed index
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPDATE_CHANNEL: ${{ matrix.channel }}
+          UPDATE_VERSION: ${{ inputs.version }}
+          FORMRECALL_UPDATE_PRIVATE_KEY: ${{ secrets.FORMRECALL_UPDATE_PRIVATE_KEY }}
+        run: node scripts/publish-desktop-ota.mjs
