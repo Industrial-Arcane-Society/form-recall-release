@@ -41,7 +41,7 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           $publisher = 'Industrial-Arcane-Society/form-recall'
           foreach ($version in @($env:BASE_VERSION, $env:TARGET_VERSION)) {
-            if ($version -cnotmatch '^\d+\.\d+\.\d+(-alpha\.[1-9]\d*)?$') { throw 'Invalid version.' }
+            if ($version -cnotmatch '^\d+\.\d+\.\d+(-(alpha|beta|rc)\.[1-9]\d*)?$') { throw 'Invalid version.' }
           }
           $base = "FormRecall-$env:BASE_VERSION-windows-x64"
           $download = Join-Path $env:RUNNER_TEMP 'ota-download'
