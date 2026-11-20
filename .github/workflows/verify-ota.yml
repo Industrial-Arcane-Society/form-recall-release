@@ -1,0 +1,90 @@
+name: Verify published Windows OTA
+
+run-name: Verify OTA ${{ inputs.from }} → ${{ inputs.to }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        type: string
+        description: Base release version (without v)
+        required: true
+      to:
+        type: string
+        description: Published update version (without v)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: Industrial-Arcane-Society/form-recall
+          ref: 69b63ee91a432cffd181439a002a1418fce76ef0
+          persist-credentials: false
+      - name: Download and verify the base setup and portable ZIP
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_VERSION: ${{ inputs.from }}
+          TARGET_VERSION: ${{ inputs.to }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $publisher = 'Industrial-Arcane-Society/form-recall'
+          foreach ($version in @($env:BASE_VERSION, $env:TARGET_VERSION)) {
+            if ($version -cnotmatch '^\d+\.\d+\.\d+(-alpha\.[1-9]\d*)?$') { throw 'Invalid version.' }
+          }
+          $base = "FormRecall-$env:BASE_VERSION-windows-x64"
+          $download = Join-Path $env:RUNNER_TEMP 'ota-download'
+          New-Item -ItemType Directory -Path $download | Out-Null
+          gh release download "v$env:BASE_VERSION" --repo $publisher --dir $download --pattern "$base-setup.exe" --pattern "$base-portable.zip"
+          $release = gh api "repos/$publisher/releases/tags/v$env:BASE_VERSION" | ConvertFrom-Json
+          foreach ($name in @("$base-setup.exe", "$base-portable.zip")) {
+            $asset = $release.assets | Where-Object name -CEQ $name
+            $hash = (Get-FileHash -LiteralPath (Join-Path $download $name)).Hash.ToLowerInvariant()
+            if ($asset.digest -cne "sha256:$hash") { throw "Checksum mismatch for $name" }
+          }
+          $ref = gh api "repos/$publisher/git/ref/tags/v$env:TARGET_VERSION" | ConvertFrom-Json
+          if ($ref.object.type -ne 'commit' -or $ref.object.sha -notmatch '^[a-f0-9]{40}$') { throw 'Missing release source identity.' }
+          $expanded = Join-Path $env:RUNNER_TEMP 'ota-验收 便携'
+          [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $download "$base-portable.zip"), $expanded)
+          "bundle=$(Join-Path $expanded $base)" >> $env:GITHUB_OUTPUT
+          "installer=$(Join-Path $download "$base-setup.exe")" >> $env:GITHUB_OUTPUT
+          "commit=$($ref.object.sha)" >> $env:GITHUB_OUTPUT
+      - name: Install, apply the OTA, render a model, and uninstall
+        env:
+          BUNDLE: ${{ steps.base.outputs.bundle }}
+          INSTALLER: ${{ steps.base.outputs.installer }}
+          SOURCE_COMMIT: ${{ steps.base.outputs.commit }}
+          BASE_VERSION: ${{ inputs.from }}
+          TARGET_VERSION: ${{ inputs.to }}
+        run: |
+          ./scripts/verify-native-installer.ps1 -PackageDirectory $env:BUNDLE -InstallerPath $env:INSTALLER `
+            -Version $env:BASE_VERSION -OutputDirectory evidence/installed -UseSoftwareOpenGL `
+            -ExpectedUpdateVersion $env:TARGET_VERSION -ExpectedUpdateCommit $env:SOURCE_COMMIT
+      - name: Apply the same OTA to the portable package and render a model
+        env:
+          BUNDLE: ${{ steps.base.outputs.bundle }}
+          SOURCE_COMMIT: ${{ steps.base.outputs.commit }}
+          TARGET_VERSION: ${{ inputs.to }}
+        run: |
+          ./scripts/verify-desktop-ota.ps1 -BundleDirectory $env:BUNDLE -ExpectedVersion $env:TARGET_VERSION `
+            -ExpectedCommit $env:SOURCE_COMMIT -OutputDirectory evidence/portable -UseSoftwareOpenGL
+      - name: Upload OTA verification evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: windows-ota-verification
+          path: |
+            evidence
+            !evidence/**/session-data/**
+          if-no-files-found: warn
