@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: Industrial-Arcane-Society/form-recall
-          ref: a8994642d5af60d49e35b32a17e4f7bd74433d1b
+          ref: 374ebb6efb5b708c77e6e751c9d9e6ba37a4ac54
           path: source
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
