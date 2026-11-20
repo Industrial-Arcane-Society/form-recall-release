@@ -17,20 +17,20 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: Industrial-Arcane-Society/form-recall
-          ref: d80dd07dee73a23f4006c01a3b65eecee05515ed
+          ref: 374ebb6efb5b708c77e6e751c9d9e6ba37a4ac54
           persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: src/apps/native-desktop/go.mod
           cache-dependency-path: src/apps/native-desktop/go.sum
-      - name: Verify Beta.2 to Alpha.4 and return using the shared archive
+      - name: Verify Beta.3 to Alpha.4 and return using the shared archive
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $repo = 'Industrial-Arcane-Society/form-recall'
-          $from = '0.3.0-beta.2'
+          $from = '0.3.0-beta.3'
           $lower = '0.3.0-alpha.4'
           $name = "FormRecall-$from-windows-x64"
           $root = Join-Path $env:RUNNER_TEMP 'FormRecall round trip 渠道'
